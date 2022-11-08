@@ -5,17 +5,7 @@ const cors = require("cors");
 const routerConfig = require('./modules/route');
 const config = require('./config/config');
 const { logger } = require('./helpers/logger');
-
-const mariadb = require("mariadb");
-
-const pool = mariadb.createPool({
-  host: process.env.DB_HOST,
-  port: process.env.DB_PORT,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_DATABASE,
-  connectionLimit: 5,
-});
+const db = require('./db/db');
 
 const init = () => {
   // *** express instance *** //
@@ -33,14 +23,16 @@ const setupStandardMiddlewares = (app) => {
   app.use(bodyParser.json());
   // parse requests of content-type - application/x-www-form-urlencoded
   app.use(bodyParser.urlencoded({ extended: true }));
-  app.use(cors());
+  app.use(cors({
+    origin: "*",
+  }));
   return;
 };
 
 const getAllValues = async () => {
   let conn;
   try {
-    conn = await pool.getConnection();
+    conn = await db.pool.getConnection();
     const data = await conn.query("Select * from Menu;");
     console.log(data);
     conn.end();
@@ -52,6 +44,54 @@ const getAllValues = async () => {
   finally {
     if(conn) conn.end();
   }
+}
+
+const signup = async (data) => {
+  let status = false;
+  let conn;
+  try{
+    conn = await db.pool.getConnection();
+    const rec_count = Number((await conn.query("SELECT count(*) AS count from user;"))[0].count);
+    // TODO: Check if same email is registered. If yes, reject signup attempt
+    // console.log(rec_count);
+    await conn.query(`INSERT INTO user (Uid, Fname, LName, HouseNo, Street, Area, City, Email, Phone) VALUES (${rec_count+1}, "${data.fname}", "${data.lname}", "${data.house_no}", "${data.street}", "${data.area}", "${data.city}", "${data.email}", ${data.phone})`);
+    await conn.query(`INSERT INTO user_login VALUES (${rec_count+1}, "${data.email}", "${data.password}")`);
+    status = true;
+  }
+  catch(err){
+    console.log(err);
+  }
+  finally {
+    if(conn) conn.end();
+  }
+  return status;
+}
+
+const login = async (data) => {
+  let conn;
+  let status = false, name = null;
+  try {
+    conn = await db.pool.getConnection();
+    const q_data = (await conn.query(`SELECT Uid as uid, Password as password FROM user_login WHERE Email="${data.email}";`))[0];
+    console.log(q_data);
+    if(q_data != undefined && q_data.password === data.password){
+      const uname = (await conn.query(`SELECT FName as name from user WHERE Uid="${q_data.uid}";`))[0];
+      if(uname != undefined){
+        status = true;
+        name = uname.name;
+      }
+    }
+  }
+  catch(err){
+    console.log(err);
+  }
+  finally {
+    if(conn) conn.close();
+  }
+  return {
+    status: status,
+    name: name,
+  };
 }
 
 const configureApiEndpoints = (app) => {
@@ -71,10 +111,22 @@ const configureApiEndpoints = (app) => {
     // res.send(JSON.stringify(data));
     res.send(data)
   })
-  app.post("/signup", (req, res) => {
+
+  app.post("/signup", async (req, res) => {
     let data = req.body;
-    console.log(data);
-    res.send("Success! It works!");
+    let ret = await signup(data);
+    res.send(JSON.stringify({
+      status: ret,
+    })); 
+  });
+
+  app.post("/login", async (req, res) => {
+    let data = req.body;
+    let ret = await login(data);
+    res.send({
+      status: ret.status,
+      name: ret.name,
+    });
   })
 };
 
