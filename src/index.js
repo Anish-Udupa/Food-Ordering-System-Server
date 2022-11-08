@@ -34,7 +34,7 @@ const getAllValues = async () => {
   try {
     conn = await db.pool.getConnection();
     const data = await conn.query("Select * from Menu;");
-    console.log(data);
+    // console.log(data);
     conn.end();
     return data;
   }
@@ -73,7 +73,7 @@ const login = async (data) => {
   try {
     conn = await db.pool.getConnection();
     const q_data = (await conn.query(`SELECT Uid as uid, Password as password FROM user_login WHERE Email="${data.email}";`))[0];
-    console.log(q_data);
+    // console.log(q_data);
     if(q_data != undefined && q_data.password === data.password){
       const uname = (await conn.query(`SELECT FName as name from user WHERE Uid="${q_data.uid}";`))[0];
       if(uname != undefined){
