@@ -47,7 +47,7 @@ const getAllValues = async () => {
 }
 
 const signup = async (data) => {
-  let status = false;
+  let status = false, uid = null, name = null;
   let conn;
   try{
     conn = await db.pool.getConnection();
@@ -57,6 +57,8 @@ const signup = async (data) => {
     await conn.query(`INSERT INTO user (Uid, Fname, LName, HouseNo, Street, Area, City, Email, Phone) VALUES (${rec_count+1}, "${data.fname}", "${data.lname}", "${data.house_no}", "${data.street}", "${data.area}", "${data.city}", "${data.email}", ${data.phone})`);
     await conn.query(`INSERT INTO user_login VALUES (${rec_count+1}, "${data.email}", "${data.password}")`);
     status = true;
+    uid = rec_count+1;
+    name = data.fname;
   }
   catch(err){
     console.log(err);
@@ -64,12 +66,16 @@ const signup = async (data) => {
   finally {
     if(conn) conn.end();
   }
-  return status;
+  return {
+    status: status,
+    uid: uid,
+    name: name,
+  };
 }
 
 const login = async (data) => {
   let conn;
-  let status = false, name = null;
+  let status = false, uid=null, name = null;
   try {
     conn = await db.pool.getConnection();
     const q_data = (await conn.query(`SELECT Uid as uid, Password as password FROM user_login WHERE Email="${data.email}";`))[0];
@@ -78,6 +84,7 @@ const login = async (data) => {
       const uname = (await conn.query(`SELECT FName as name from user WHERE Uid="${q_data.uid}";`))[0];
       if(uname != undefined){
         status = true;
+        uid = q_data.uid;
         name = uname.name;
       }
     }
@@ -90,6 +97,7 @@ const login = async (data) => {
   }
   return {
     status: status,
+    uid: uid,
     name: name,
   };
 }
@@ -99,9 +107,9 @@ const configureApiEndpoints = (app) => {
   // routerConfig.init(app);
   // define a route handler for the default home page
   app.get( "/", (req, res) => {
-    res.send( "Welcome to express-create application! " );
+    res.send( "Welcome to Food Ordering System's Backend" );
   });
-  app.post("/place-order", (req, res) => {
+  app.post("/place-order", async (req, res) => {
     let body = req.body;
     console.log(body);
     res.send("Success")
@@ -115,9 +123,11 @@ const configureApiEndpoints = (app) => {
   app.post("/signup", async (req, res) => {
     let data = req.body;
     let ret = await signup(data);
-    res.send(JSON.stringify({
-      status: ret,
-    })); 
+    res.send({
+      status: ret.status,
+      uid: ret.uid,
+      name: ret.name,
+    }); 
   });
 
   app.post("/login", async (req, res) => {
@@ -125,6 +135,7 @@ const configureApiEndpoints = (app) => {
     let ret = await login(data);
     res.send({
       status: ret.status,
+      uid: ret.uid,
       name: ret.name,
     });
   })
