@@ -5,7 +5,9 @@ const cors = require("cors");
 const routerConfig = require('./modules/route');
 const config = require('./config/config');
 const { logger } = require('./helpers/logger');
-const db = require('./db/db');
+const { resetMenu, getMenu } = require('./modules/menu/menu');
+const { signup, login } = require('./modules/auth/auth');
+const { placeOrder } = require('./modules/order/order');
 
 const init = () => {
   // *** express instance *** //
@@ -29,78 +31,6 @@ const setupStandardMiddlewares = (app) => {
   return;
 };
 
-const getAllValues = async () => {
-  let conn;
-  try {
-    conn = await db.pool.getConnection();
-    const data = await conn.query("Select * from Menu;");
-    // console.log(data);
-    conn.end();
-    return data;
-  }
-  catch(err) {
-    console.log(err);
-  }
-  finally {
-    if(conn) conn.end();
-  }
-}
-
-const signup = async (data) => {
-  let status = false, uid = null, name = null;
-  let conn;
-  try{
-    conn = await db.pool.getConnection();
-    const rec_count = Number((await conn.query("SELECT count(*) AS count from user;"))[0].count);
-    // TODO: Check if same email is registered. If yes, reject signup attempt
-    // console.log(rec_count);
-    await conn.query(`INSERT INTO user (Uid, Fname, LName, HouseNo, Street, Area, City, Email, Phone) VALUES (${rec_count+1}, "${data.fname}", "${data.lname}", "${data.house_no}", "${data.street}", "${data.area}", "${data.city}", "${data.email}", ${data.phone})`);
-    await conn.query(`INSERT INTO user_login VALUES (${rec_count+1}, "${data.email}", "${data.password}")`);
-    status = true;
-    uid = rec_count+1;
-    name = data.fname;
-  }
-  catch(err){
-    console.log(err);
-  }
-  finally {
-    if(conn) conn.end();
-  }
-  return {
-    status: status,
-    uid: uid,
-    name: name,
-  };
-}
-
-const login = async (data) => {
-  let conn;
-  let status = false, uid=null, name = null;
-  try {
-    conn = await db.pool.getConnection();
-    const q_data = (await conn.query(`SELECT Uid as uid, Password as password FROM user_login WHERE Email="${data.email}";`))[0];
-    // console.log(q_data);
-    if(q_data != undefined && q_data.password === data.password){
-      const uname = (await conn.query(`SELECT FName as name from user WHERE Uid="${q_data.uid}";`))[0];
-      if(uname != undefined){
-        status = true;
-        uid = q_data.uid;
-        name = uname.name;
-      }
-    }
-  }
-  catch(err){
-    console.log(err);
-  }
-  finally {
-    if(conn) conn.close();
-  }
-  return {
-    status: status,
-    uid: uid,
-    name: name,
-  };
-}
 
 const configureApiEndpoints = (app) => {
   app.use("/api/v1/", routerConfig.init());
@@ -110,12 +40,13 @@ const configureApiEndpoints = (app) => {
     res.send( "Welcome to Food Ordering System's Backend" );
   });
   app.post("/place-order", async (req, res) => {
-    let body = req.body;
-    console.log(body);
-    res.send("Success")
+    let data = req.body;
+    // console.log(data);
+    const ret = placeOrder(data);
+    res.send(ret);
   });
-  app.get("/all-items", async (req, res) => {
-    let data = await getAllValues();
+  app.get("/get-menu", async (req, res) => {
+    let data = await getMenu();
     // res.send(JSON.stringify(data));
     res.send(data)
   })
@@ -138,6 +69,11 @@ const configureApiEndpoints = (app) => {
       uid: ret.uid,
       name: ret.name,
     });
+  })
+
+  app.get("/reset-menu", async (req, res) => {
+    const ret = await resetMenu();
+    res.send(ret);
   })
 };
 
